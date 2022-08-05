@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -58,6 +59,7 @@ public class RetryImpl<T> implements Retry {
     private final boolean failAfterMaxAttempts;
     private final IntervalBiFunction<T> intervalBiFunction;
     private final Predicate<Throwable> exceptionPredicate;
+    private final Consumer<T> cleanup;
     private final LongAdder succeededAfterRetryCounter;
     private final LongAdder failedAfterRetryCounter;
     private final LongAdder succeededWithoutRetryCounter;
@@ -76,6 +78,7 @@ public class RetryImpl<T> implements Retry {
         this.intervalBiFunction = config.getIntervalBiFunction();
         this.exceptionPredicate = config.getExceptionPredicate();
         this.resultPredicate = config.getResultPredicate();
+        this.cleanup = config.getCleanup();
         this.metrics = this.new RetryMetrics();
         this.eventProcessor = new RetryEventProcessor();
         succeededAfterRetryCounter = new LongAdder();
@@ -182,6 +185,9 @@ public class RetryImpl<T> implements Retry {
         @Override
         public boolean onResult(T result) {
             if (null != resultPredicate && resultPredicate.test(result)) {
+                if (cleanup != null) {
+                    cleanup.accept(result);
+                }
                 int currentNumOfAttempts = numOfAttempts.incrementAndGet();
                 if (currentNumOfAttempts >= maxAttempts) {
                     return false;

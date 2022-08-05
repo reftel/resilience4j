@@ -27,6 +27,7 @@ import io.github.resilience4j.core.predicate.PredicateCreator;
 import java.io.Serializable;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -50,6 +51,9 @@ public class RetryConfig implements Serializable {
 
     @Nullable
     private Predicate retryOnResultPredicate;
+
+    @Nullable
+    private Consumer cleanup;
 
     private int maxAttempts = DEFAULT_MAX_ATTEMPTS;
     private boolean failAfterMaxAttempts = false;
@@ -147,6 +151,12 @@ public class RetryConfig implements Serializable {
         return retryOnResultPredicate;
     }
 
+    @SuppressWarnings("unchecked")
+    @Nullable
+    public <T> Consumer<T> getCleanup() {
+        return cleanup;
+    }
+
     public static class Builder<T> {
 
         private int maxAttempts = DEFAULT_MAX_ATTEMPTS;
@@ -163,6 +173,9 @@ public class RetryConfig implements Serializable {
 
         @Nullable
         private IntervalBiFunction<T> intervalBiFunction;
+
+        @Nullable
+        private Consumer<T> cleanup;
 
         @SuppressWarnings("unchecked")
         private Class<? extends Throwable>[] retryExceptions = new Class[0];
@@ -187,6 +200,7 @@ public class RetryConfig implements Serializable {
             } else {
                 this.intervalBiFunction = baseConfig.intervalBiFunction;
             }
+            this.cleanup = baseConfig.cleanup;
         }
 
         public Builder<T> maxAttempts(int maxAttempts) {
@@ -332,6 +346,23 @@ public class RetryConfig implements Serializable {
             return this;
         }
 
+        /**
+         * Configures a cleanup handler to be called on all results for which retry is done.
+         *
+         * If the code that is run with retry returns a result, as opposed to throwing an
+         * exception, and that result is deemed to require a retry by a predicate configured using
+         * {@link #retryOnResult}, then the consumer configured using this method will be called
+         * on that result. The consumer will <b>not</b> be called on results that the predicate
+         * deems successful.
+         *
+         * @param cleanup the code to run on results which require retry
+         * @return the RetryConfig.Builder
+         */
+        public final Builder<T> cleanup(Consumer<T> cleanup) {
+            this.cleanup = cleanup;
+            return this;
+        }
+
         public RetryConfig build() {
             if (intervalFunction != null && intervalBiFunction != null) {
                 throw new IllegalStateException("The intervalFunction was configured twice which could result in an" +
@@ -349,6 +380,7 @@ public class RetryConfig implements Serializable {
             config.intervalFunction = createIntervalFunction();
             config.intervalBiFunction = Optional.ofNullable(intervalBiFunction)
                 .orElse(IntervalBiFunction.ofIntervalFunction(config.intervalFunction));
+            config.cleanup = cleanup;
             return config;
         }
 

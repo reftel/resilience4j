@@ -34,10 +34,13 @@ import io.vavr.control.Try;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -145,6 +148,28 @@ public class SupplierRetryTest {
 
         then(helloWorldService).should(times(2)).returnHelloWorld();
         assertThat(result).isEqualTo("Hello world");
+    }
+
+    @Test
+    public void shouldCleanupAfterRetryWithResult() {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> cleanedUp = new ArrayList<>();
+        given(helloWorldService.returnHelloWorld()).willAnswer(
+            i -> calls.getAndIncrement() == 0 ? "BAD!" : "Hello world"
+        );
+        final RetryConfig tryAgain = RetryConfig.<String>custom()
+            .retryOnResult(s -> !s.contains("Hello world"))
+            .cleanup(cleanedUp::add)
+            .build();
+        Retry retry = Retry.of("id", tryAgain);
+        Supplier<String> supplier = Retry
+            .decorateSupplier(retry, helloWorldService::returnHelloWorld);
+
+        String result = supplier.get();
+
+        then(helloWorldService).should(times(2)).returnHelloWorld();
+        assertThat(result).isEqualTo("Hello world");
+        assertThat(cleanedUp).containsExactly("BAD!");
     }
 
     @Test
