@@ -180,7 +180,7 @@ public interface Retry {
      */
     static CheckedRunnable decorateCheckedRunnable(Retry retry, CheckedRunnable runnable) {
         return () -> {
-            Retry.Context context = retry.context();
+            Retry.Context<Void> context = retry.context();
             do {
                 try {
                     runnable.run();
