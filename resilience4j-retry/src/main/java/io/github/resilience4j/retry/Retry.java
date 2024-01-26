@@ -22,6 +22,9 @@ import io.github.resilience4j.core.EventConsumer;
 import io.github.resilience4j.core.functions.CheckedFunction;
 import io.github.resilience4j.core.functions.CheckedRunnable;
 import io.github.resilience4j.core.functions.CheckedSupplier;
+import io.github.resilience4j.core.functions.ExceptionalFunction;
+import io.github.resilience4j.core.functions.ExceptionalRunnable;
+import io.github.resilience4j.core.functions.ExceptionalSupplier;
 import io.github.resilience4j.retry.event.*;
 import io.github.resilience4j.retry.internal.RetryImpl;
 
@@ -160,6 +163,27 @@ public interface Retry {
         };
     }
 
+    static <T, E extends Exception> ExceptionalSupplier<T, E> decorateExceptionalSupplier(Retry retry,
+                                                          ExceptionalSupplier<T, E> supplier) {
+        return () -> {
+            Retry.Context<T> context = retry.context();
+            do {
+                try {
+                    T result = supplier.get();
+                    final boolean validationOfResult = context.onResult(result);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        return result;
+                    }
+                } catch (RuntimeException exception) {
+                    context.onRuntimeError(exception);
+                } catch (Exception exception) {
+                    context.onError((E) exception);
+                }
+            } while (true);
+        };
+    }
+
     /**
      * Creates a retryable supplier using current instance as context.
      *
@@ -169,6 +193,10 @@ public interface Retry {
      */
     default <T> CheckedSupplier<T> decorateCheckedSupplier(CheckedSupplier<T> supplier) {
         return decorateCheckedSupplier(this, supplier);
+    }
+
+    default <T, E extends Exception> ExceptionalSupplier<T, E> decorateExceptionalSupplier(ExceptionalSupplier<T, E> supplier) {
+        return decorateExceptionalSupplier(this, supplier);
     }
 
     /**
@@ -193,6 +221,23 @@ public interface Retry {
         };
     }
 
+    static <E extends Exception> ExceptionalRunnable<E> decorateExceptionalRunnable(Retry retry, ExceptionalRunnable<E> runnable) {
+        return () -> {
+            Retry.Context<Void> context = retry.context();
+            do {
+                try {
+                    runnable.run();
+                    context.onComplete();
+                    break;
+                } catch (RuntimeException exception) {
+                    context.onRuntimeError(exception);
+                } catch (Exception exception) {
+                    context.onError((E) exception);
+                }
+            } while (true);
+        };
+    }
+
     /**
      * Creates a retryable runnable using current instance as context.
      *
@@ -201,6 +246,16 @@ public interface Retry {
      */
     default CheckedRunnable decorateCheckedRunnable(CheckedRunnable runnable) {
         return decorateCheckedRunnable(this, runnable);
+    }
+
+    /**
+     * Creates a retryable runnable using current instance as context.
+     *
+     * @param runnable the original runnable
+     * @return a retryable runnable
+     */
+    default <E extends Exception> ExceptionalRunnable<E> decorateExceptionalRunnable(ExceptionalRunnable<E> runnable) {
+        return decorateExceptionalRunnable(this, runnable);
     }
 
     /**
@@ -230,6 +285,24 @@ public interface Retry {
             } while (true);
         };
     }
+    static <T, R, E extends Exception> ExceptionalFunction<T, R, E> decorateExceptionalFunction(Retry retry,
+                                                                ExceptionalFunction<T, R, E> function) {
+        return (T t) -> {
+            Retry.Context<R> context = retry.context();
+            do {
+                try {
+                    R result = function.apply(t);
+                    final boolean validationOfResult = context.onResult(result);
+                    if (!validationOfResult) {
+                        context.onComplete();
+                        return result;
+                    }
+                } catch (Exception exception) {
+                    context.onError((E) exception);
+                }
+            } while (true);
+        };
+    }
 
     /**
      * Creates a retryable function using current instance as context.
@@ -241,6 +314,10 @@ public interface Retry {
      */
     default <T, R> CheckedFunction<T, R> decorateCheckedFunction(CheckedFunction<T, R> function) {
         return decorateCheckedFunction(this, function);
+    }
+
+    default <T, R, E extends Exception> ExceptionalFunction<T, R, E> decorateExceptionalFunction(ExceptionalFunction<T, R, E> function) {
+        return decorateExceptionalFunction(this, function);
     }
 
     /**
@@ -577,9 +654,9 @@ public interface Retry {
          * Handles a checked exception
          *
          * @param exception the exception to handle
-         * @throws Exception when retry count has exceeded
+         * @throws E when retry count has exceeded
          */
-        void onError(Exception exception) throws Exception;
+        <E extends Exception> void onError(E exception) throws E;
 
         /**
          * Handles a runtime exception
