@@ -1,6 +1,5 @@
 package io.github.resilience4j.springboot3.timelimiter;
 
-import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.github.resilience4j.common.CompositeCustomizer;
 import io.github.resilience4j.common.timelimiter.configuration.TimeLimiterConfigCustomizer;
 import io.github.resilience4j.common.timelimiter.monitoring.endpoint.TimeLimiterEventsEndpointResponse;
@@ -51,9 +50,6 @@ public class TimeLimiterAutoConfigurationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
-
-    @Rule
-    public WireMockRule wireMockRule = new WireMockRule(8090);
 
     @Test
     public void testTimeLimiterAutoConfigurationTest() throws Exception {
